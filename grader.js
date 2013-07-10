@@ -24,14 +24,17 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var URL_DEFAULT = "";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
     if(!fs.existsSync(instr)) {
         console.log("%s does not exist. Exiting.", instr);
-        process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
+        process.exit(1); 
+	// http://nodejs.org/api/process.html#process_process_exit_code
     }
     return instr;
 };
@@ -61,14 +64,58 @@ var clone = function(fn) {
     return fn.bind({});
 };
 
+var url2file = function(url, checks) {
+    rest.get(url).on('complete', function(result) {
+	if (result instanceof Error) {
+	    console.error('Error: ' + result.message);
+	} else {
+	    var html_file = fs.writeFileSync(__dirname + '/downloaded.html', result);
+	    // console.log('URL downloaded and saved (temporarily)...');
+	    check_file(__dirname+'/downloaded.html', checks);
+	}
+    });
+};
+
+var check_file = function(file_name, checks) {
+    var checkJson = checkHtmlFile(file_name, checks);
+    fs.exists(__dirname+'/downloaded.html', function(exists) {
+	if (exists) {
+	  fs.unlink(__dirname+'/downloaded.html', function(err) {
+	      if (err) {
+                  console.log('Could not delete downloaded html file. Should be rm\'d manually...');
+                  throw err;
+	      } else {
+		  // console.log('Removed downloaded html file...');
+	      }
+          });
+	}
+    });
+    var outJson = JSON.stringify(checkJson, null, 4);
+    console.log(outJson);
+}
+
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <file_url>', 'URL of html file', URL_DEFAULT)
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
+    if (program.url == "") {
+	//var checkJson = checkHtmlFile(program.file, program.checks);
+	check_file(program.file, program.checks);
+    } else {
+	url2file(program.url, program.checks);
+	/*var checkJson = checkHtmlFile(__dirname+'/downloaded.html', program.checks);
+	fs.unlink(__dirname+'/downloaded.html', function(err) {
+	    if (err) {
+		console.log('Could not delete downloaded html file. Should be rm\'d manually...');
+		throw err;
+	    }
+	});*/
+    }
+    /*
     var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    console.log(outJson);*/
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
